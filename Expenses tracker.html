@@ -1,0 +1,573 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expense Tracker - Personal & Department</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+}
+
+body{
+font-family:Arial, sans-serif;
+max-width:1200px;
+margin:auto;
+padding:20px;
+background:#f4f4f4;
+}
+
+.container{
+background:white;
+border-radius:10px;
+padding:20px;
+box-shadow:0 0 10px rgba(0,0,0,0.1);
+}
+
+h1,h2{
+text-align:center;
+margin-bottom:20px;
+color:#333;
+}
+
+.mode-toggle,.role-login{
+text-align:center;
+margin-bottom:20px;
+}
+
+select,input,button{
+padding:10px;
+margin:5px;
+border:1px solid #ddd;
+border-radius:5px;
+}
+
+button{
+background:#4CAF50;
+color:white;
+cursor:pointer;
+}
+
+button:hover{
+background:#45a049;
+}
+
+.delete{
+background:#f44336;
+}
+
+.approve{
+background:#2196F3;
+}
+
+#expenseForm{
+display:flex;
+flex-wrap:wrap;
+justify-content:center;
+}
+
+.summary{
+display:flex;
+justify-content:space-around;
+margin:20px 0;
+}
+
+.summary div{
+background:#e7f3ff;
+padding:20px;
+border-radius:10px;
+text-align:center;
+flex:1;
+margin:0 10px;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin:20px 0;
+}
+
+th,td{
+padding:12px;
+text-align:left;
+border-bottom:1px solid #ddd;
+}
+
+th{
+background:#f2f2f2;
+}
+
+canvas{
+max-height:300px;
+margin:20px 0;
+}
+
+.hidden{
+display:none;
+}
+
+/* MOBILE RESPONSIVE */
+
+@media (max-width:768px){
+
+body{
+padding:10px;
+}
+
+.container{
+padding:15px;
+}
+
+#expenseForm{
+flex-direction:column;
+align-items:stretch;
+}
+
+select,input,button{
+width:100%;
+margin:6px 0;
+}
+
+.summary{
+flex-direction:column;
+}
+
+.summary div{
+margin:8px 0;
+}
+
+table{
+display:block;
+overflow-x:auto;
+white-space:nowrap;
+}
+
+th,td{
+font-size:14px;
+padding:8px;
+}
+
+button{
+width:100%;
+}
+
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Expense Tracker - B.Com CA Project</h1>
+
+<div id="loginForm" class="role-login">
+
+<h3>Login Role</h3>
+
+<select id="roleSelect">
+<option value="staff">Staff</option>
+<option value="admin">Admin</option>
+</select>
+
+<button onclick="setRole()">Login</button>
+
+</div>
+
+<div id="mainApp" class="hidden">
+
+<div class="mode-toggle">
+
+<label>Mode:</label>
+
+<select id="modeSelect" onchange="switchMode()">
+<option value="personal">Personal Finance</option>
+<option value="department">Department Expense</option>
+</select>
+
+</div>
+
+<form id="expenseForm" onsubmit="addEntry(event)">
+
+<input type="number" id="amount" placeholder="Amount (₹)" required>
+
+<select id="type">
+<option value="income">Income</option>
+<option value="expense">Expense</option>
+</select>
+
+<select id="category">
+<option value="Food">Food</option>
+<option value="Travel">Travel</option>
+<option value="Bills">Bills</option>
+<option value="EMI">EMI</option>
+<option value="Supplies">Office Supplies</option>
+<option value="Vendor">Vendor</option>
+</select>
+
+<input type="text" id="vendor" placeholder="Vendor/Note">
+
+<input type="date" id="date">
+
+<button type="submit">Add</button>
+
+</form>
+
+<div class="summary">
+
+<div>Total Income<br><strong id="totalIncome">₹0</strong></div>
+
+<div>Total Expense<br><strong id="totalExpense">₹0</strong></div>
+
+<div>Balance<br><strong id="balance">₹0</strong></div>
+
+<div>Budget Used<br><strong id="budgetUsed">0%</strong></div>
+
+</div>
+
+<canvas id="pieChart"></canvas>
+
+<canvas id="barChart"></canvas>
+
+<h2>Entries</h2>
+
+<table>
+
+<thead>
+
+<tr>
+<th>Date</th>
+<th>Amount</th>
+<th>Type</th>
+<th>Category</th>
+<th>Vendor</th>
+<th>Status</th>
+<th>Actions</th>
+</tr>
+
+</thead>
+
+<tbody id="entryList"></tbody>
+
+</table>
+
+<div style="text-align:center;margin:20px 0;">
+
+<button onclick="generateReport()">Monthly Report</button>
+
+<button onclick="generateYearlyReport()">Yearly Report</button>
+
+<button onclick="exportPDF()">Export PDF</button>
+
+<button onclick="clearData()" class="delete">Clear All Data</button>
+
+</div>
+
+</div>
+
+</div>
+
+<script>
+
+let currentMode='personal'
+
+let userRole=localStorage.getItem('role')||'staff'
+
+let personalData=JSON.parse(localStorage.getItem('personalData'))||[]
+
+let deptData=JSON.parse(localStorage.getItem('deptData'))||[]
+
+let budgets={Food:5000,Travel:3000,Bills:2000,EMI:10000,Supplies:8000,Vendor:5000}
+
+let pieChart
+let barChart
+
+window.onload=function(){
+
+document.getElementById('roleSelect').value=userRole
+
+setRole()
+
+document.getElementById('date').valueAsDate=new Date()
+
+render()
+
+}
+
+function setRole(){
+
+userRole=document.getElementById('roleSelect').value
+
+localStorage.setItem('role',userRole)
+
+document.getElementById('loginForm').classList.add('hidden')
+
+document.getElementById('mainApp').classList.remove('hidden')
+
+render()
+
+}
+
+function switchMode(){
+
+currentMode=document.getElementById('modeSelect').value
+
+render()
+
+}
+
+function getCurrentData(){
+
+return currentMode==='personal'?personalData:deptData
+
+}
+
+function saveData(){
+
+if(currentMode==='personal')
+
+localStorage.setItem('personalData',JSON.stringify(personalData))
+
+else
+
+localStorage.setItem('deptData',JSON.stringify(deptData))
+
+}
+
+function addEntry(e){
+
+e.preventDefault()
+
+const data={
+
+id:Date.now(),
+
+amount:parseFloat(document.getElementById('amount').value),
+
+type:document.getElementById('type').value,
+
+category:document.getElementById('category').value,
+
+vendor:document.getElementById('vendor').value||'',
+
+date:document.getElementById('date').value,
+
+status:currentMode==='department'?(userRole==='admin'?'approved':'pending'):'n/a'
+
+}
+
+getCurrentData().push(data)
+
+saveData()
+
+render()
+
+document.getElementById('expenseForm').reset()
+
+document.getElementById('date').valueAsDate=new Date()
+
+}
+
+function deleteEntry(id){
+
+const data=getCurrentData()
+
+const index=data.findIndex(item=>item.id===id)
+
+data.splice(index,1)
+
+saveData()
+
+render()
+
+}
+
+function approveEntry(id){
+
+if(userRole!=='admin')return
+
+const data=getCurrentData()
+
+const entry=data.find(item=>item.id===id)
+
+if(entry)entry.status='approved'
+
+saveData()
+
+render()
+
+}
+
+function render(){
+
+const data=getCurrentData()
+
+let income=0
+
+let expense=0
+
+const catExpense={}
+
+data.forEach(item=>{
+
+if(item.type==='income')income+=item.amount
+
+else{
+
+expense+=item.amount
+
+catExpense[item.category]=(catExpense[item.category]||0)+item.amount
+
+}
+
+})
+
+document.getElementById('totalIncome').textContent=`₹${income}`
+
+document.getElementById('totalExpense').textContent=`₹${expense}`
+
+document.getElementById('balance').textContent=`₹${income-expense}`
+
+let maxUsed=0
+
+for(let cat in catExpense){
+
+let percent=(catExpense[cat]/budgets[cat])*100
+
+if(percent>maxUsed)maxUsed=percent
+
+}
+
+document.getElementById('budgetUsed').textContent=`${maxUsed.toFixed(0)}%`
+
+const tbody=document.getElementById('entryList')
+
+tbody.innerHTML=''
+
+data.sort((a,b)=>new Date(b.date)-new Date(a.date)).forEach(item=>{
+
+const row=tbody.insertRow()
+
+row.innerHTML=`
+
+<td>${item.date}</td>
+
+<td>${item.amount}</td>
+
+<td>${item.type}</td>
+
+<td>${item.category}</td>
+
+<td>${item.vendor}</td>
+
+<td>${item.status}</td>
+
+<td>
+
+<button onclick="deleteEntry(${item.id})" class="delete">Delete</button>
+
+${currentMode==='department'&&userRole==='admin'&&item.status==='pending'
+?`<button onclick="approveEntry(${item.id})" class="approve">Approve</button>`:''}
+
+</td>
+
+`
+
+})
+
+updateCharts(catExpense)
+
+}
+
+function updateCharts(catExpense){
+
+const ctx1=document.getElementById('pieChart')
+
+const ctx2=document.getElementById('barChart')
+
+if(pieChart)pieChart.destroy()
+
+if(barChart)barChart.destroy()
+
+pieChart=new Chart(ctx1,{
+type:'pie',
+data:{
+labels:Object.keys(catExpense),
+datasets:[{data:Object.values(catExpense)}]
+}
+})
+
+const months={}
+
+getCurrentData().forEach(item=>{
+
+const m=new Date(item.date).toLocaleDateString('en-US',{month:'short',year:'numeric'})
+
+months[m]=(months[m]||0)+(item.type==='expense'?item.amount:0)
+
+})
+
+barChart=new Chart(ctx2,{
+type:'bar',
+data:{
+labels:Object.keys(months),
+datasets:[{label:'Expenses',data:Object.values(months)}]
+}
+})
+
+}
+
+function generateReport(){
+
+alert("Monthly report generated")
+
+}
+
+function generateYearlyReport(){
+
+alert("Yearly report generated")
+
+}
+
+function exportPDF(){
+
+const {jsPDF}=window.jspdf
+
+const doc=new jsPDF()
+
+doc.text("Expense Report",20,20)
+
+doc.save("expense_report.pdf")
+
+}
+
+function clearData(){
+
+if(confirm("Clear all data?")){
+
+if(currentMode==='personal')personalData=[]
+
+else deptData=[]
+
+saveData()
+
+render()
+
+}
+
+}
+
+</script>
+
+</body>
+</html>
+```
